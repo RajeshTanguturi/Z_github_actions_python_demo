@@ -1,36 +1,114 @@
-name: CI/CD with Security Scan
+name: CI/CD with Security + Push
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
   workflow_dispatch:
+    inputs:
+      scan_type:
+        description: "Scan type (fs/image/both)"
+        required: true
+        default: "both"
 
 jobs:
-  security-pipeline:
+  pipeline:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build Docker Image
+      - name: Build Image
         run: |
-          docker build -t flask-secure-app .
+          docker build -t ${{ vars.IMAGE_NAME }} .
 
       - name: Install Trivy
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          sudo apt-get install -y wget gnupg lsb-release
           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
           echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
           sudo apt-get update
           sudo apt-get install -y trivy
 
-      - name: Run Trivy FS Scan
+      - name: FS Scan
+        if: ${{ github.event.inputs.scan_type == 'fs' || github.event.inputs.scan_type == 'both' || github.event_name != 'workflow_dispatch' }}
         run: |
-          trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+          trivy fs --exit-code 1 --severity ${{ vars.TRIVY_SEVERITY }} .
 
-      - name: Run Trivy Image Scan
+      - name: Image Scan
+        if: ${{ github.event.inputs.scan_type == 'image' || github.event.inputs.scan_type == 'both' || github.event_name != 'workflow_dispatch' }}
         run: |
-          trivy image --exit-code 1 --severity HIGH,CRITICAL flask-secure-app
+          trivy image --exit-code 1 --severity ${{ vars.TRIVY_SEVERITY }} ${{ vars.IMAGE_NAME }}
+
+      - name: Login to GHCR
+        if: success()
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
+
+      - name: Tag Image
+        if: success()
+        run: |
+          docker tag ${{ vars.IMAGE_NAME }} ${{ vars.REGISTRY }}/${{ vars.IMAGE_NAME }}:latest
+
+      - name: Push Image
+        if: success()
+        run: |
+          docker push ${{ vars.REGISTRY }}/${{ vars.IMAGE_NAME }}:latest
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# name: CI/CD with Security Scan
+
+# on:
+#   push:
+#     branches: [ "main" ]
+#   pull_request:
+#   workflow_dispatch:
+
+# jobs:
+#   security-pipeline:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v4
+
+#       - name: Build Docker Image
+#         run: |
+#           docker build -t flask-secure-app .
+
+#       - name: Install Trivy
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+#           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+#           echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+#           sudo apt-get update
+#           sudo apt-get install -y trivy
+
+#       - name: Run Trivy FS Scan
+#         run: |
+#           trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+
+#       - name: Run Trivy Image Scan
+#         run: |
+#           trivy image --exit-code 1 --severity HIGH,CRITICAL flask-secure-app
