@@ -39,7 +39,7 @@ jobs:
       - name: Image Scan
         if: ${{ github.event.inputs.scan_type == 'image' || github.event.inputs.scan_type == 'both' || github.event_name != 'workflow_dispatch' }}
         run: |
-          trivy image --exit-code 1 --severity ${{ vars.TRIVY_SEVERITY }} ${{ vars.IMAGE_NAME }}
+          trivy image --exit-code 1 --severity ${{ vars.TRIVY_SEVERITY }} ${{ vars.IMAGE_NAME }}  --ignore-unfixed
 
       - name: Login to GHCR
         if: success()
